@@ -126,7 +126,8 @@ void Paladin::onAnimationFinished(const std::string& animName)
 
 void Paladin::setState(PaladinState newState)
 {
-    if (_currentState == newState) return;
+    if (_currentState == newState) 
+        return;
 
     // --- 强制清理攻击连击计时器并同步位置 ---
     if (_comboWindowAction) {
@@ -135,7 +136,7 @@ void Paladin::setState(PaladinState newState)
 
         // 当攻击动作被新状态（如WALK/RUN）打断时，必须将当前视觉位置赋值给_moveBasePos
         if (_currentState == PaladinState::ATTACKING) {
-            _moveBasePos = getPosition3D(); // **【关键】被打断时，用当前视觉位置作为新基准**
+            _moveBasePos = getPosition3D();
         }
     }
     // ----------------------------------------------------
@@ -152,7 +153,7 @@ void Paladin::setState(PaladinState newState)
             playAnimation(ANIM_IDLE, true);
             _moveSpeed = 0.0f;
 
-            // 【修改 2】：处理 ATTACKING/JUMPING 状态恢复到 IDLE 时的位置同步
+            // 处理 ATTACKING/JUMPING 状态恢复到 IDLE 时的位置同步
             // 尽管 onAnimationFinished/runJump 结束时会尝试同步，
             // 但如果用户操作打断了这些动作（比如连按移动），保险起见再次同步。
             if (oldState == PaladinState::ATTACKING || oldState == PaladinState::JUMPING) {
@@ -169,9 +170,6 @@ void Paladin::setState(PaladinState newState)
             playAnimation(ANIM_RUN, true);
             _moveSpeed = _runSpeed; // 使用常量 _runSpeed 而非硬编码 150.0f
             break;
-
-            // ... (其他状态保持不变) ...
-
         case PaladinState::BLOCK_IDLE:
             playAnimation(ANIM_BLOCK_IDLE, true);
             _moveSpeed = 0.0f;
@@ -194,34 +192,76 @@ void Paladin::setState(PaladinState newState)
 // =========================================================================
 void Paladin::runMove(const Vec3& direction, bool isRunning)
 {
-    // 过滤无效状态：攻击时仅允许20%转向（原有逻辑保留）
+    // 过滤无效状态
     if (_isAttacking) {
-        Vec3 dir(direction.x, 0, direction.z);
-        if (dir.lengthSquared() > 0.01f) {
-            dir.normalize();
-            float angle = CC_RADIANS_TO_DEGREES(atan2f(dir.x, dir.z));
-            setRotation3D(getRotation3D().lerp(Vec3(0, angle, 0), 0.2f));
+        // 攻击中，只允许少量平滑转向，转向方向应由锁定状态决定或保持。
+        // 为了简化，我们只允许在非锁定状态下转向，或者保持当前锁定方向。
+        if (_isRotationLocked) {
+            // 攻击中保持锁定朝向
+            float targetAngle = CC_RADIANS_TO_DEGREES(atan2f(_lockedDirection.x, _lockedDirection.z));
+            setRotation3D(Vec3(0, targetAngle, 0));
+        }
+        else {
+            // 非锁定攻击中，允许少量朝向输入的转向
+            Vec3 dir(direction.x, 0, direction.z);
+            if (dir.lengthSquared() > 0.01f) {
+                dir.normalize();
+                float angle = CC_RADIANS_TO_DEGREES(atan2f(dir.x, dir.z));
+                setRotation3D(getRotation3D().lerp(Vec3(0, angle, 0), 0.2f));
+            }
         }
         return;
     }
 
-    // 处理方向向量：仅XZ平面，避免零向量（原有逻辑保留）
-    Vec3 moveDir(direction.x, 0, direction.z);
-    if (moveDir.lengthSquared() < 0.0001f) {
-        setState(PaladinState::IDLE);
+    // 1. 处理输入向量 (direction 视为 相对镜头 的输入: X/Z)
+    Vec3 moveInput(direction.x, 0, direction.z);
+    if (moveInput.lengthSquared() < 0.0001f) {
+        // 如果没有输入，且不是保持状态，则停止移动
+        if (_currentState == PaladinState::WALK || _currentState == PaladinState::RUN) {
+            setState(PaladinState::IDLE);
+        }
         return;
     }
+    moveInput.normalize();
+
+    // 相对镜头方向计算世界移动向量**
+    // 2. 获取镜头的 Y 轴旋转角 (转换为弧度)
+    float cameraYaw = CC_DEGREES_TO_RADIANS(this->_cameraYawAngle);
+
+    // 3. 计算镜头在世界坐标系上的前向和右向向量 (XZ平面)
+    Vec3 camForward = Vec3(sinf(cameraYaw), 0.0f, cosf(cameraYaw));
+    Vec3 camRight = Vec3(camForward.z, 0.0f, -camForward.x);
+
+    // 4. 计算世界移动方向：将相对输入 (moveInput) 投影到世界坐标系
+    // moveInput.z (前后输入) 乘以 camForward
+    // moveInput.x (左右输入) 乘以 camRight
+    Vec3 moveDir = camForward * moveInput.z - camRight * moveInput.x;
     moveDir.normalize();
 
-    // 计算角色朝向（Y轴旋转）（原有逻辑保留）
-    float angle = CC_RADIANS_TO_DEGREES(atan2f(moveDir.x, moveDir.z));
-    setRotation3D(Vec3(0, angle, 0));
 
-    // 更新移动状态（原有逻辑保留）
+    // 角色朝向处理（结合锁定）
+    if (!_isRotationLocked) {
+        // 未锁定：平滑转向移动方向（人物面向行走方向）
+        float targetAngle = CC_RADIANS_TO_DEGREES(atan2f(moveDir.x, moveDir.z));
+        float currentAngle = getRotation3D().y;
+
+        // 使用 LERP 平滑转向，避免瞬间跳转
+        float newAngle = currentAngle + (targetAngle - currentAngle) * 0.2f;
+
+        setRotation3D(Vec3(0, newAngle, 0));
+    }
+    else {
+        // 已锁定：保持锁定方向（人物面向 _lockedDirection）
+        // _lockedDirection 在 toggleLock 中已设置
+        float targetAngle = CC_RADIANS_TO_DEGREES(atan2f(_lockedDirection.x, _lockedDirection.z));
+        setRotation3D(Vec3(0, targetAngle, 0));
+    }
+    // -----------------------------------------------------------------
+
+    // 更新移动状态（保留）
     setState(isRunning ? PaladinState::RUN : PaladinState::WALK);
 
-    _moveDirection = moveDir;
-
+    _moveDirection = moveDir; // 更新位移方向，由 update() 处理
 }
 
 
@@ -230,6 +270,23 @@ void Paladin::stopMove()
     // 只有在 WALK/RUN 状态时才停止
     if (_currentState == PaladinState::WALK || _currentState == PaladinState::RUN) {
         setState(PaladinState::IDLE);
+    }
+}
+
+// =========================================================================
+// 锁定逻辑
+// =========================================================================
+void Paladin::toggleLock(bool isLocked, const cocos2d::Vec3& targetDir)
+{
+    _isRotationLocked = isLocked;
+
+    if (isLocked) {
+        // 确保传入的锁定方向是归一化的 (XZ平面)
+        _lockedDirection = Vec3(targetDir.x, 0, targetDir.z).getNormalized();
+
+        // 锁定后，立即将角色朝向目标方向
+        float targetAngle = CC_RADIANS_TO_DEGREES(atan2f(_lockedDirection.x, _lockedDirection.z));
+        setRotation3D(Vec3(0, targetAngle, 0));
     }
 }
 
@@ -494,6 +551,7 @@ void Paladin::runSkillShadow()
             ghost1->setPosition3D(this->getPosition3D() + Vec3(5, 0, 10)); // 偏右前方
             ghost1->setRotation3D(this->getRotation3D());
             ghost1->setOpacity(180);
+            ghost1->setScale(0.1f);
             this->getParent()->addChild(ghost1);
 
             // 播放动画并结束后移除
@@ -511,6 +569,7 @@ void Paladin::runSkillShadow()
             ghost2->setPosition3D(this->getPosition3D() + Vec3(0, 0, 0)); // 原地出现
             ghost2->setRotation3D(this->getRotation3D());
             ghost2->setOpacity(180);
+            ghost2->setScale(0.1f);
             this->getParent()->addChild(ghost2);
 
             ghost2->runAction(Sequence::create(
@@ -527,6 +586,7 @@ void Paladin::runSkillShadow()
             ghost3->setPosition3D(this->getPosition3D() + Vec3(0, 0, 8)); // 正前方近距离
             ghost3->setRotation3D(this->getRotation3D());
             ghost3->setOpacity(180);
+            ghost3->setScale(0.1f);
             this->getParent()->addChild(ghost3);
 
             ghost3->runAction(Sequence::create(
@@ -543,6 +603,7 @@ void Paladin::runSkillShadow()
             ghost4->setPosition3D(this->getPosition3D() + Vec3(0, 0, 15)); // 正前方远距离
             ghost4->setRotation3D(this->getRotation3D());
             ghost4->setOpacity(180);
+            ghost4->setScale(0.1f);
             this->getParent()->addChild(ghost4);
 
             ghost4->runAction(Sequence::create(
@@ -559,6 +620,7 @@ void Paladin::runSkillShadow()
             ghost5->setPosition3D(this->getPosition3D() + Vec3(-10, 0, 5)); // 偏左前方
             ghost5->setRotation3D(this->getRotation3D());
             ghost5->setOpacity(180);
+            ghost5->setScale(0.1f);
             this->getParent()->addChild(ghost5);
 
             ghost5->runAction(Sequence::create(

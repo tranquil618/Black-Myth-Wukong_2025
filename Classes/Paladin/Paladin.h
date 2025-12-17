@@ -40,6 +40,13 @@ public:
     void runMove(const Vec3& direction, bool isRunning); // WASD + Space
     void stopMove();
 
+    //镜头
+    void setCameraYawAngle(float angle) { _cameraYawAngle = angle; }// 设置摄像机 Y 轴朝向角度 (度数)
+    // 切换锁定状态。如果锁定目标，传入目标方向；否则传入 Vec3::ZERO。
+    // 如果有怪物，传入怪物方向；如果没有，传入人物的 getForwardVector()
+    void toggleLock(bool isLocked, const cocos2d::Vec3& targetDir);
+    bool  _isRotationLocked = false;  // 是否锁定朝向
+    bool isRotationLocked() const { return _isRotationLocked; }
 private:
     PaladinState _currentState = PaladinState::IDLE;
     int _comboCount = 0;
@@ -52,6 +59,10 @@ private:
     Vec3  _attackDirection;          // 攻击方向（锁定）
     Vec3  _moveBasePos;
     cocos2d::Vec3 _moveDirection;
+
+    float _cameraYawAngle = 0.0f;     // 摄像机在 Y 轴的朝向角度 (度数)
+
+    cocos2d::Vec3 _lockedDirection = cocos2d::Vec3::ZERO; // 锁定时人物面向的方向
 
     Action* _comboWindowAction = nullptr;
     float _moveSpeed = 0.0f;
