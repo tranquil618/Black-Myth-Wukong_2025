@@ -1,8 +1,18 @@
 #include "EnemyKnight.h"
-#include "Player.h"
+#include "Player/Player.h"
 #include <cstdlib>
 
 USING_NS_CC;
+
+// ===== 模型与动画名 =====
+static const std::string KNIGHT_MODEL = "model/knight/knight.c3b";
+
+static const std::string ANIM_IDLE = "Armature|knight_idle";
+static const std::string ANIM_RUN = "Armature|knight_run";
+static const std::string ANIM_ATTACK = "Armature|knight_attack";
+static const std::string ANIM_HIT = "Armature|knight_hit";
+static const std::string ANIM_BLOCK = "Armature|knight_block";
+static const std::string ANIM_DEAD = "Armature|knight_dead";
 
 EnemyKnight* EnemyKnight::create()
 {
@@ -21,7 +31,7 @@ bool EnemyKnight::init()
     if (!EnemyBase::init())
         return false;
 
-    // ===== 基础属性（中等型防御敌人）=====
+    // ===== 属性：中等型防御敌人 =====
     _maxHp = 120;
     _hp = _maxHp;
     _attack = 18;
@@ -30,34 +40,34 @@ bool EnemyKnight::init()
     _attackCooldown = 1.8f;
 
     // ===== 模型 =====
-    _model = Sprite3D::create("model/knight.c3b");
+    _model = Sprite3D::create(KNIGHT_MODEL);
     _model->setScale(1.0f);
     addChild(_model);
 
-    // ===== 动画 =====
+    // ===== 动画加载（单 c3b + 动画名）=====
     _idleAction = Animate3D::create(
-        Animation3D::create("model/knight_idle.c3b"));
+        Animation3D::create(KNIGHT_MODEL, ANIM_IDLE));
     _idleAction->retain();
 
     _runAction = Animate3D::create(
-        Animation3D::create("model/knight_walk.c3b"));
+        Animation3D::create(KNIGHT_MODEL, ANIM_RUN));
     _runAction->retain();
 
     _attackAction = Animate3D::create(
-        Animation3D::create("model/knight_attack.c3b"));
+        Animation3D::create(KNIGHT_MODEL, ANIM_ATTACK));
     _attackAction->retain();
 
     _hitAction = Animate3D::create(
-        Animation3D::create("model/knight_hit.c3b"));
+        Animation3D::create(KNIGHT_MODEL, ANIM_HIT));
     _hitAction->retain();
 
-    _deadAction = Animate3D::create(
-        Animation3D::create("model/knight_dead.c3b"));
-    _deadAction->retain();
-
     _blockAction = Animate3D::create(
-        Animation3D::create("model/knight_block.c3b"));
+        Animation3D::create(KNIGHT_MODEL, ANIM_BLOCK));
     _blockAction->retain();
+
+    _deadAction = Animate3D::create(
+        Animation3D::create(KNIGHT_MODEL, ANIM_DEAD));
+    _deadAction->retain();
 
     changeState(EnemyState::IDLE);
     return true;
@@ -76,11 +86,11 @@ void EnemyKnight::update(float dt)
 
         if (_attackTimer >= _attackCooldown)
         {
-            changeState(EnemyState::ATTACK);
             _attackTimer = 0.0f;
+            changeState(EnemyState::ATTACK);
 
             runAction(Sequence::create(
-                DelayTime::create(0.4f),
+                DelayTime::create(0.45f),
                 CallFunc::create(
                     CC_CALLBACK_0(EnemyKnight::doAttack, this)),
                 nullptr));
@@ -107,14 +117,11 @@ void EnemyKnight::takeDamage(int damage)
     if (_state == EnemyState::DEAD)
         return;
 
-    // ===== 75% 概率盾牌格挡 =====
+    // ===== 75% 概率格挡 =====
     float r = static_cast<float>(rand()) / RAND_MAX;
     if (r < _blockChance)
     {
-        // 格挡成功：不扣血
-        _model->stopAllActions();
-        if (_blockAction)
-            _model->runAction(_blockAction);
+        changeState(EnemyState::BLOCK);
         return;
     }
 

@@ -1,7 +1,17 @@
 #include "EnemyGoblin.h"
-#include "Player.h"
+#include "Player/Player.h"
 
 USING_NS_CC;
+
+// ===== 动画名称常量 =====
+static const std::string GOBLIN_MODEL = "model/goblin/goblin.c3b";
+
+static const std::string ANIM_IDLE = "Armature|goblin_idle";
+static const std::string ANIM_RUN = "Armature|goblin_run";
+static const std::string ANIM_ATTACK = "Armature|goblin_attack";
+static const std::string ANIM_HIT = "Armature|goblin_hit";
+static const std::string ANIM_DEAD = "Armature|goblin_dead";
+static const std::string ANIM_BLOCK = "Armature|goblin_block";
 
 EnemyGoblin* EnemyGoblin::create()
 {
@@ -20,44 +30,43 @@ bool EnemyGoblin::init()
     if (!EnemyBase::init())
         return false;
 
-    // ===== 基础属性（简单版）=====
-    _maxHp = 40;
+    // ===== 基础属性 =====
+    _maxHp = 60;
     _hp = _maxHp;
-    _attack = 8;
-    _speed = 70.0f;
-    _attackRange = 25.0f;
-    _attackCooldown = 1.5f;
+    _attack = 10;
+    _speed = 80.0f;
+    _attackRange = 30.0f;
+    _attackCooldown = 1.2f;
 
-    // ===== 模型 =====
-    _model = Sprite3D::create("model/goblin.c3b");
-    _model->setScale(1.0f);
+    // ===== 创建模型 =====
+    _model = Sprite3D::create(GOBLIN_MODEL);
+    _model->setScale(0.8f);
     addChild(_model);
 
-    // ===== 动画 =====
+    // ===== 加载动画（关键修改点）=====
     _idleAction = Animate3D::create(
-        Animation3D::create("model/goblin_idle.c3b"));
+        Animation3D::create(GOBLIN_MODEL, ANIM_IDLE));
     _idleAction->retain();
 
     _runAction = Animate3D::create(
-        Animation3D::create("model/goblin_run.c3b"));
+        Animation3D::create(GOBLIN_MODEL, ANIM_RUN));
     _runAction->retain();
 
     _attackAction = Animate3D::create(
-        Animation3D::create("model/goblin_attack.c3b"));
+        Animation3D::create(GOBLIN_MODEL, ANIM_ATTACK));
     _attackAction->retain();
 
     _hitAction = Animate3D::create(
-        Animation3D::create("model/goblin_hit.c3b"));
+        Animation3D::create(GOBLIN_MODEL, ANIM_HIT));
     _hitAction->retain();
 
-    _deadAction = Animate3D::create(
-        Animation3D::create("model/goblin_dead.c3b"));
-    _deadAction->retain();
-
-    // 格挡动画（即使只是表现，也单独留）
     _blockAction = Animate3D::create(
-        Animation3D::create("model/goblin_block.c3b"));
+        Animation3D::create(GOBLIN_MODEL, ANIM_BLOCK));
     _blockAction->retain();
+
+    _deadAction = Animate3D::create(
+        Animation3D::create(GOBLIN_MODEL, ANIM_DEAD));
+    _deadAction->retain();
 
     changeState(EnemyState::IDLE);
     return true;
@@ -76,13 +85,13 @@ void EnemyGoblin::update(float dt)
 
         if (_attackTimer >= _attackCooldown)
         {
-            changeState(EnemyState::ATTACK);
             _attackTimer = 0.0f;
+            changeState(EnemyState::ATTACK);
 
-            // 攻击动画中段命中
             runAction(Sequence::create(
                 DelayTime::create(0.35f),
-                CallFunc::create(CC_CALLBACK_0(EnemyGoblin::doAttack, this)),
+                CallFunc::create(
+                    CC_CALLBACK_0(EnemyGoblin::doAttack, this)),
                 nullptr));
         }
     }
@@ -99,38 +108,5 @@ void EnemyGoblin::doAttack()
     if (player)
     {
         player->takeDamage(_attack);
-    }
-}
-
-void EnemyGoblin::takeDamage(int damage)
-{
-    if (_state == EnemyState::DEAD)
-        return;
-
-    // 简单版：每次受击都先播放格挡动画
-    _isBlocking = true;
-    _model->stopAllActions();
-
-    if (_blockAction)
-    {
-        _model->runAction(Sequence::create(
-            _blockAction,
-            CallFunc::create([this]() {
-                _isBlocking = false;
-                }),
-            nullptr));
-    }
-
-    // 扣血（格挡只是表现，不免伤）
-    _hp -= damage;
-
-    if (_hp <= 0)
-    {
-        _hp = 0;
-        changeState(EnemyState::DEAD);
-    }
-    else
-    {
-        changeState(EnemyState::HIT);
     }
 }

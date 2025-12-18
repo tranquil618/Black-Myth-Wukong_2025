@@ -1,7 +1,16 @@
 #include "EnemyMinotaur.h"
-#include "Player.h"
+#include "Player/Player.h"
 
 USING_NS_CC;
+
+// ===== 模型与动画名 =====
+static const std::string MINOTAUR_MODEL = "model/minotaur/minotaur.c3b";
+
+static const std::string ANIM_IDLE = "Armature|minotaur_idle";
+static const std::string ANIM_WALK = "Armature|minotaur_walk";
+static const std::string ANIM_ATTACK = "Armature|minotaur_attack";
+static const std::string ANIM_HIT = "Armature|minotaur_hit";
+static const std::string ANIM_DEAD = "Armature|minotaur_dead";
 
 EnemyMinotaur* EnemyMinotaur::create()
 {
@@ -20,39 +29,41 @@ bool EnemyMinotaur::init()
     if (!EnemyBase::init())
         return false;
 
-    // ===== 基础属性（重型敌人）=====
+    // ===== 属性：高血高攻慢速 =====
     _maxHp = 200;
     _hp = _maxHp;
-    _attack = 30;
-    _speed = 30.0f;
+    _attack = 28;
+    _speed = 35.0f;
     _attackRange = 40.0f;
-    _attackCooldown = 2.5f;
+    _attackCooldown = 2.2f;
 
     // ===== 模型 =====
-    _model = Sprite3D::create("model/minotaur.c3b");
+    _model = Sprite3D::create(MINOTAUR_MODEL);
     _model->setScale(1.2f);
     addChild(_model);
 
-    // ===== 动画 =====
+    // ===== 动画加载 =====
     _idleAction = Animate3D::create(
-        Animation3D::create("model/minotaur_idle.c3b"));
+        Animation3D::create(MINOTAUR_MODEL, ANIM_IDLE));
     _idleAction->retain();
 
     _runAction = Animate3D::create(
-        Animation3D::create("model/minotaur_walk.c3b"));
+        Animation3D::create(MINOTAUR_MODEL, ANIM_WALK));
     _runAction->retain();
 
     _attackAction = Animate3D::create(
-        Animation3D::create("model/minotaur_attack.c3b"));
+        Animation3D::create(MINOTAUR_MODEL, ANIM_ATTACK));
     _attackAction->retain();
 
     _hitAction = Animate3D::create(
-        Animation3D::create("model/minotaur_hit.c3b"));
+        Animation3D::create(MINOTAUR_MODEL, ANIM_HIT));
     _hitAction->retain();
 
     _deadAction = Animate3D::create(
-        Animation3D::create("model/minotaur_dead.c3b"));
+        Animation3D::create(MINOTAUR_MODEL, ANIM_DEAD));
     _deadAction->retain();
+
+    _blockAction = nullptr;
 
     changeState(EnemyState::IDLE);
     return true;
@@ -71,10 +82,9 @@ void EnemyMinotaur::update(float dt)
 
         if (_attackTimer >= _attackCooldown)
         {
-            changeState(EnemyState::ATTACK);
             _attackTimer = 0.0f;
+            changeState(EnemyState::ATTACK);
 
-            // 重击：命中稍晚，显得“沉”
             runAction(Sequence::create(
                 DelayTime::create(0.6f),
                 CallFunc::create(

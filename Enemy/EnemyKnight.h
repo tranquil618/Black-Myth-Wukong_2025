@@ -8,7 +8,7 @@ public:
     virtual bool init() override;
     virtual void update(float dt) override;
 
-    // 覆盖：用于实现盾牌格挡
+    // 覆盖：实现概率格挡
     virtual void takeDamage(int damage) override;
 
 protected:
