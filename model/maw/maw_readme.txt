@@ -1,0 +1,17 @@
+1.maw_idle:待机状态，站在原地，可于未发现playerde1状态
+2.maw_idle_2:待机状态2，伸懒腰
+3.maw_jumpAttack:向前起跳并且攻击，起身后保持准备攻击的姿势，适合二阶段
+4.maw_turnLeft45:向左转45°
+5.maw_deepBreatheIdle:也是待机状态，站那呼吸
+6.mae_dead:死亡动画
+7.maw_showMusle:秀肌肉的动画，可作为二阶段起始动画
+8.maw_jumpAttack_2:向前起跳攻击2，不过取消落地后准备攻击的动作，适合一阶段
+9.maw_jump：原地起跳
+10.maw_punch：右勾拳，作为普通攻击二
+11.maw_turnRight45:向右转45°
+12.maw_turnRight90：向右转90°
+13.maw_roar:咆哮，适合作为二阶段开始动画
+14.maw_run:向前跑
+15.maw_swipe:左手的从上往下抓的一次攻击二
+16.maw_walk：行走
+17.dodge_forward,dodge_backward,dodge_left,dodge_right闪避
