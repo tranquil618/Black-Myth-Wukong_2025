@@ -76,11 +76,32 @@ private:
     /** 检查玩家是否触发传送门（距离判定与场景切换） */
     void checkPortalTeleport();
 
+    /** 切换至Boss关卡：处理场景切换的具体逻辑（移除旧模型、加载新场景等） */
+    void switchToBossLevel(); // 新增：场景切换调度函数声明
+
+    /** 清理旧场景资源并替换天空盒：移除旧模型，创建并设置熔岩天空盒 */
+    void cleanOldSceneResources(); // 新增：旧场景清理函数声明
+
+    /** 加载Boss关卡资源并完成初始化：加载新模型、重置相机、播放音效、召唤Boss */
+    void loadBossLevelResourcesAndInit(); // 新增：新关卡加载初始化函数声明
+
     /** 显示游戏结束界面（胜利/失败状态） */
     void showEndGameUI(bool isVictory);
 
     /** 重启游戏回调（切换到新场景实例） */
     void restartGame(cocos2d::Ref* pSender);
+
+    // ======================================
+    // 关键补充：拆分后的辅助函数声明（START）
+    // ======================================
+    /** 空气墙位置修正：限制玩家在场景边界内，防止越界 */
+    void correctPlayerPositionByAirWall();
+
+    /** 敌人更新与清理：更新存活敌人状态，移除死亡/空指针敌人 */
+    void updateAndCleanEnemies(float dt);
+    // ======================================
+    // 关键补充：拆分后的辅助函数声明（END）
+    // ======================================
 
     //------------------------------
     // UI相关函数
@@ -156,6 +177,10 @@ private:
     cocos2d::Skybox* _skybox = nullptr;
     cocos2d::Node* _haloEffect;  // 光晕特效 
     cocos2d::Sprite3D* _newModel;    // 新场景模型
+
+
 };
 
-#endif
+#endif 
+
+

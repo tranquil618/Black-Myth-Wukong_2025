@@ -51,36 +51,19 @@ bool HelloWorld::init() {
 //------------------------------
 
 /**
- * 帧更新函数
- * 处理游戏核心逻辑：
- * - 状态检查（暂停/结束/玩家死亡）
- * - 控制器更新（输入+相机）
- * - 敌人与Boss更新
- * - 场景切换逻辑
+ * 辅助函数：空气墙玩家位置修正
+ * 处理玩家位置越界限制逻辑：
+ * - 玩家非空安全校验，避免空指针异常
+ * - 寺庙场景（未切换关卡）的X轴宽度限制
+ * - 寺庙场景（未切换关卡）的Z轴长度限制
+ * - 玩家越界位置的修正与应用
  */
-void HelloWorld::update(float dt) {
-    // 暂停/结束状态直接返回
-    if (_isGamePaused || _isGameOver) return;
+void HelloWorld::correctPlayerPositionByAirWall()
+{
+    // 原空气墙逻辑完整迁移，无任何修改
+    if (!_player) return; // 增加玩家非空判断，更健壮
 
-    // 玩家为空时终止更新
-    if (!_player) return;
-
-    // 玩家死亡判定（带最低HP容错）
-    if (_player->getHP() <= 0) {
-        _isGameOver = true;
-        this->showEndGameUI(false);
-        return;
-    }
-
-    // 更新控制器（输入+相机）
-    if (_player && _inputController) _inputController->update(dt);
-    if (_camera && _cameraController) _cameraController->update(dt);
-
-    // =========================================================
-// 🧱 5. 新增：空气墙逻辑 (Air Walls)
-// =========================================================
-
-// 获取控制器更新后的最新位置
+    // 获取控制器更新后的最新位置
     Vec3 currentPos = _player->getPosition3D();
     bool needCorrection = false; // 标记是否需要修正
 
@@ -89,7 +72,6 @@ void HelloWorld::update(float dt) {
         // 基于传送门位置: Vec3(0, 25, -2500)
 
         // A. X轴限制 (走廊宽度)
-        // 假设走廊总宽 300 (左右各 150)，根据实际模型微调这个数字
         float limitX = 400.0f;
 
         if (currentPos.x < -limitX) {
@@ -102,8 +84,6 @@ void HelloWorld::update(float dt) {
         }
 
         // B. Z轴限制 (走廊长度)
-        // 起点：Z = 200 (入口缓冲)
-        // 终点：Z = -2550 (传送门在 -2500，多给 50 空间让你能撞到门)
         float startZ = 200.0f;
         float endZ = -2550.0f;
 
@@ -121,6 +101,37 @@ void HelloWorld::update(float dt) {
     if (needCorrection) {
         _player->setPosition3D(currentPos);
     }
+}
+
+/**
+ * 帧更新函数
+ * 处理游戏核心逻辑：
+ * - 状态检查（暂停/结束/玩家死亡）
+ * - 控制器更新（输入+相机）
+ * - 敌人与Boss更新
+ * - 场景切换逻辑
+ */
+void HelloWorld::update(float dt)
+{
+    // 暂停/结束状态直接返回
+    if (_isGamePaused || _isGameOver) return;
+
+    // 玩家为空时终止更新
+    if (!_player) return;
+
+    // 玩家死亡判定（带最低HP容错）
+    if (_player->getHP() <= 0) {
+        _isGameOver = true;
+        this->showEndGameUI(false);
+        return;
+    }
+
+    // 更新控制器（输入+相机）
+    if (_player && _inputController) _inputController->update(dt);
+    if (_camera && _cameraController) _cameraController->update(dt);
+
+    // 调用拆分后的空气墙位置修正函数
+    this->correctPlayerPositionByAirWall();
 
     // Boss战逻辑
     if (_isLevelSwitched && _boss) {
@@ -155,7 +166,7 @@ void HelloWorld::update(float dt) {
         }
     }
 
-    // 场景切换逻辑（仅在未切换且所有敌人被消灭时触发）
+    // 场景切换逻辑
     if (!_isLevelSwitched && _enemies.empty()) {
         checkPortalTeleport();
     }
@@ -330,8 +341,123 @@ void HelloWorld::setupEnvironment() {
 //------------------------------
 
 /**
+ * 辅助函数：清理旧场景资源并替换天空盒
+ * 处理旧场景的资源销毁与天空盒更新逻辑：
+ * - 移除寺庙场景的旧模型（寺庙、传送门、光晕特效）
+ * - 删除旧天空盒并安全置空
+ * - 创建熔岩主题新天空盒并设置属性
+ */
+void HelloWorld::cleanOldSceneResources()
+{
+    // A.移除旧的模型
+    if (_temple) _temple->removeFromParent();
+    if (_portal) _portal->removeFromParent();
+    if (_haloEffect) _haloEffect->removeFromParent();
+
+    // ==========================================
+    // 切换天空盒逻辑 
+    // ==========================================
+
+    // 1. 删除旧的天空盒
+    if (_skybox) {
+        _skybox->removeFromParent();
+        _skybox = nullptr; // 安全置空
+    }
+
+    // 2. 创建新的天空盒 
+    _skybox = Skybox::create(
+        "background/background/picture/lava.png", "background/background/picture/lava.png",
+        "background/background/picture/lava.png", "background/background/picture/lava.png",
+        "background/background/picture/lava.png", "background/background/picture/lava.png"
+    );
+
+    // 3. 设置新天空盒属性
+    if (_skybox) {
+        _skybox->setCameraMask((unsigned short)CameraFlag::USER1);
+        _skybox->setScale(1.0f);
+        this->addChild(_skybox, -100);
+    }
+    // ==========================================
+}
+
+/**
+ * 辅助函数：加载Boss关卡资源并完成初始化
+ * 处理Boss关卡的资源加载与功能启动逻辑：
+ * - 加载斗兽场3D模型并设置属性
+ * - 创建并配置第二关大地板
+ * - 重置摄像机位置适配新场景
+ * - 播放传送触发音效
+ * - 切换Boss战背景音乐
+ * - 召唤Boss敌人开启决战
+ */
+void HelloWorld::loadBossLevelResourcesAndInit()
+{
+    // B.加载新的模型 (Colliseum)
+    _newModel = Sprite3D::create("background/background/3d/colliseum.c3b");
+    if (_newModel) {
+        _newModel->setScale(10.0f);
+        _newModel->setPosition3D(Vec3(1400, 700, -2300));
+        _newModel->setRotation3D(Vec3(90, 90, 0));
+        _newModel->setCameraMask((unsigned short)CameraFlag::USER1);
+        _newModel->setColor(Color3B(80, 60, 40));
+        this->addChild(_newModel);
+    }
+    // C.给第二关加个大地板
+    _secondFloor = Sprite::create("background/background/picture/ground.png");
+
+    if (_secondFloor) {
+        // 1. 铺平
+        _secondFloor->setRotation3D(Vec3(-90, 0, 0));
+
+        // 2. 位置：
+        _secondFloor->setPosition3D(Vec3(0, -45, 0));
+
+        // 3. 大小
+        _secondFloor->setScale(1000.0f);
+
+        // 4. 掩码
+        _secondFloor->setCameraMask((unsigned short)CameraFlag::USER1);
+
+        // 这里的 -1 意思是：在这个场景的所有子节点中，排在最下面
+        this->addChild(_secondFloor, -50);
+    }
+
+    // D.重置摄像机
+    _camera->setPosition3D(Vec3(0, -100, -215));
+
+    // E.播放音效 
+    SimpleAudioEngine::getInstance()->playEffect("background/background/music/teleport.wav");
+
+    // F.切换背景音乐
+    auto audio = SimpleAudioEngine::getInstance();
+    audio->stopBackgroundMusic();
+    audio->playBackgroundMusic("background/background/music/bgm2.mp3", true);
+
+    // G.召唤Boss
+    spawnBoss();
+}
+
+/**
+ * 辅助函数：切换至Boss关卡（斗兽场场景）
+ * 调度Boss关卡切换的完整流程：
+ * - 清理旧场景资源并替换天空盒
+ * - 加载新关卡资源并完成初始化
+ */
+void HelloWorld::switchToBossLevel()
+{
+    // 第一步：清理旧场景资源（旧模型+天空盒替换）
+    this->cleanOldSceneResources();
+
+    // 第二步：加载新关卡资源并初始化（模型+地板+相机+音效+Boss）
+    this->loadBossLevelResourcesAndInit();
+}
+
+/**
  * 检查传送门触发条件
- * 逻辑：玩家进入传送范围->切换场景->加载斗兽场->召唤Boss
+ * 处理传送门触发的核心判断逻辑：
+ * - 防重复触发与玩家/传送门非空安全校验
+ * - 玩家与传送门的距离计算
+ * - 满足触发阈值时标记关卡切换并调度场景切换逻辑
  */
 void HelloWorld::checkPortalTeleport() {
     // 防重复触发锁 + 安全检查
@@ -339,64 +465,10 @@ void HelloWorld::checkPortalTeleport() {
         float distance = _player->getPosition3D().distance(_portal->getPosition3D());
 
         if (distance < TELEPORT_DISTANCE) {
-            _isLevelSwitched = true;
+            _isLevelSwitched = true; // 标记关卡已切换，防止重复触发
 
-            // A.移除旧的模型
-            if (_temple) _temple->removeFromParent();
-            if (_portal) _portal->removeFromParent();
-            if (_haloEffect) _haloEffect->removeFromParent();
-
-            // ==========================================
-            // 切换天空盒逻辑 
-            // ==========================================
-
-            // 1. 删除旧的天空盒
-            if (_skybox) {
-                _skybox->removeFromParent();
-                _skybox = nullptr; // 安全置空
-            }
-
-            // 2. 创建新的天空盒 
-            _skybox = Skybox::create(
-                "background/background/picture/lava.png", "background/background/picture/lava.png",
-                "background/background/picture/lava.png", "background/background/picture/lava.png",
-                "background/background/picture/lava.png", "background/background/picture/lava.png"
-            );
-
-            // 3. 设置新天空盒属性
-            if (_skybox) {
-                _skybox->setCameraMask((unsigned short)CameraFlag::USER1);
-                _skybox->setScale(1.0f);
-                this->addChild(_skybox, -100);
-            }
-
-            // ==========================================
-
-            // B.加载新的模型 (Colliseum)
-            _newModel = Sprite3D::create("background/background/3d/colliseum.c3b");
-            if (_newModel) {
-                _newModel->setScale(10.0f);
-                _newModel->setPosition3D(Vec3(1400, 700, -2300));
-                _newModel->setRotation3D(Vec3(90, 90, 0));
-                _newModel->setCameraMask((unsigned short)CameraFlag::USER1);
-                _newModel->setColor(Color3B(80, 60, 40));
-                this->addChild(_newModel);
-            }
-
-
-            // E.重置摄像机
-            _camera->setPosition3D(Vec3(0, -100, -215));
-
-            // F.播放音效 
-            SimpleAudioEngine::getInstance()->playEffect("background/background/music/teleport.wav");
-
-            // G.切换背景音乐
-            auto audio = SimpleAudioEngine::getInstance();
-            audio->stopBackgroundMusic();
-            audio->playBackgroundMusic("background/background/music/bgm2.mp3", true);
-
-            // 召唤Boss
-            spawnBoss();
+            // 调用拆分后的场景切换辅助函数，执行具体切换逻辑
+            this->switchToBossLevel();
         }
     }
 }
@@ -412,6 +484,7 @@ void HelloWorld::spawnBoss() {
     if (_boss) {
         _boss->setPosition3D(TEMPLE_DESTINATION + Vec3(300, 0, 0)); // 玩家侧方300单位
         _boss->setTarget(_player);
+        _boss->setGlobalZOrder(100);
         _boss->setScale(1.0f);
         _boss->setCameraMask((unsigned short)CameraFlag::USER1);
         this->addChild(_boss);
@@ -462,7 +535,7 @@ void HelloWorld::setupEnemies() {
 
 /**
  * 显示游戏结束界面
- * @param isVictory 是否胜利（决定显示文字与颜色）
+ * 是否胜利（决定显示文字与颜色）
  */
 void HelloWorld::showEndGameUI(bool isVictory) {
     auto visibleSize = Director::getInstance()->getWinSize();
